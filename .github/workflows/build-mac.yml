@@ -70,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: adblock-coffee-macos-arm64-dylib
-          path: target/lib/libadblock_coffee.dylib
+          path: target/aarch64-apple-darwin/release/adblock_coffee.dylib
           if-no-files-found: error
           retention-days: 30
 
