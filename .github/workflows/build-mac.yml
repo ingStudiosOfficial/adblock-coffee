@@ -32,7 +32,7 @@ jobs:
           architecture: aarch64
           cache: maven
 
-      - name: Set up Maven
+      - name: Show Maven version
         run: mvn --version
 
       - name: Build Rust native library
@@ -43,34 +43,42 @@ jobs:
             --manifest-path adblock-rs/Cargo.toml
 
       - name: Verify native library
+        shell: bash
         run: |
-          LIB="adblock-rs/target/aarch64-apple-darwin/release/libadblock_coffee.dylib"
+          echo "=== Dynamic libraries ==="
+          find adblock-rs/target/aarch64-apple-darwin/release \
+            -maxdepth 2 -type f \
+            \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) \
+            -print
 
-          if [ ! -f "$LIB" ]; then
-            echo "ERROR: Native library not found: $LIB"
-            echo "Available files:"
-            find adblock-rs/target/aarch64-apple-darwin/release -maxdepth 2 -type f
+          LIB="$(find adblock-rs/target/aarch64-apple-darwin/release \
+            -maxdepth 1 -type f -name '*.dylib' -print -quit)"
+
+          if [ -z "$LIB" ]; then
+            echo "ERROR: No .dylib found. Check the Cargo build output."
             exit 1
           fi
 
+          echo "Found: $LIB"
           file "$LIB"
           lipo -info "$LIB"
 
-      - name: Prepare Maven native library directory
-        run: |
-          mkdir -p target/lib
-          cp adblock-rs/target/aarch64-apple-darwin/release/libadblock_coffee.dylib target/lib/
-
-          ls -lh target/lib/
+          echo "NATIVE_LIB=$LIB" >> "$GITHUB_ENV"
 
       - name: Build Maven package
         run: mvn --batch-mode clean package -DskipTests
+
+      - name: Stage native library
+        run: |
+          mkdir -p target/lib
+          cp "$NATIVE_LIB" target/lib/
+          ls -lh target/lib/
 
       - name: Upload native library
         uses: actions/upload-artifact@v4
         with:
           name: adblock-coffee-macos-arm64-dylib
-          path: target/aarch64-apple-darwin/release/adblock_coffee.dylib
+          path: target/lib/*.dylib
           if-no-files-found: error
           retention-days: 30
 
