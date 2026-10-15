@@ -17,9 +17,11 @@ impl AdvtBlocker {
         let debug_info = true;
 
         let mut filter_set = FilterSet::new(debug_info);
-        filter_set.add_filters(&filter_list, ParseOptions::default());
+        for filter in filter_list {
+            filter_set.add_filter_list(filter, ParseOptions::default());
+        }
 
-        let filter_engine = Engine::from_filter_set(filter_set, true);
+        let filter_engine = Engine::new_with_filter_set(filter_set);
 
         AdvtBlocker {
             engine: filter_engine,
@@ -27,9 +29,9 @@ impl AdvtBlocker {
     }
 
     pub fn check_network_urls(&self, url: &str, src_url: &str, req_type: &str) -> Result<bool> {
-        let request = Request::new(url, src_url, req_type)?;
+        let request = Request::new(url, src_url, req_type, "GET")?;
         let blocker_result = self.engine.check_network_request(&request);
-        Ok(blocker_result.matched)
+        Ok(blocker_result.should_block())
     }
 }
 
