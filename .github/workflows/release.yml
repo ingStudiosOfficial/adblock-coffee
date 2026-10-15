@@ -88,6 +88,25 @@ jobs:
       - name: Build Rust native library
         run: cargo build --release --target ${{ matrix.rust-target }} --manifest-path adblock-rs/Cargo.toml
 
+      - name: Copy native library
+        shell: bash
+        run: |
+          mkdir -p target/lib
+
+          case "$RUNNER_OS" in
+            Linux)
+              LIB="libadblock_coffee.so"
+              ;;
+            Windows)
+              LIB="adblock_coffee.dll"
+              ;;
+            macOS)
+              LIB="libadblock_coffee.dylib"
+              ;;
+          esac
+
+          cp "adblock-rs/target/release/$LIB" "target/lib/$LIB"
+
       - name: Build Java library
         run: mvn package
 
