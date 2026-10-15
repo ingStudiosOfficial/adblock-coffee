@@ -1,5 +1,51 @@
+name: "Create release"
+on:
+  push:
+    branches:
+      - "master"
+      - "release/**"
+  workflow_dispatch:
 
-build:
+jobs:
+  create-release:
+    name: create release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    outputs:
+      version_output: ${{ steps.version.outputs.project_version }}
+      upload_url_output: ${{ steps.release.outputs.upload_url }}
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          architecture: x64
+
+      - name: Get project version
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "project_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create github release
+        id: release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: false
+          prerelease: false
+          body_path: CHANGELOG.md
+          tag_name: adblock-coffee-${{ steps.version.outputs.project_version }}
+          release_name: adblock-coffee-${{ steps.version.outputs.project_version }}
+
+
+  build:
     name: build project (${{ matrix.rust-target }})
     runs-on: ${{ matrix.os }}
     needs: create-release
