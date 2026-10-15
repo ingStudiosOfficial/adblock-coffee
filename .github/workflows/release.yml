@@ -1,102 +1,48 @@
-name: "Create release"
-on:
-  push:
-    branches:
-      - "master"
-      - "release/**"
-  workflow_dispatch:
 
-jobs:
-  create-release:
-    name: create release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    outputs:
-      version_output: ${{ steps.version.outputs.project_version }}
-      upload_url_output: ${{ steps.release.outputs.upload_url }}
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-          architecture: x64
-
-      - name: Get project version
-        id: version
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "project_version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create github release
-        id: release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          draft: false
-          prerelease: false
-          body_path: CHANGELOG.md
-          tag_name: adblock-coffee-${{ steps.version.outputs.project_version }}
-          release_name: adblock-coffee-${{ steps.version.outputs.project_version }}
-
-  build:
-    name: build project
-    runs-on: ubuntu-latest
+build:
+    name: build project (${{ matrix.rust-target }})
+    runs-on: ${{ matrix.os }}
     needs: create-release
     permissions:
       contents: write
+
     strategy:
+      fail-fast: false
       matrix:
-        rust-target: [
-          'x86_64-unknown-linux-gnu',
-          'x86_64-apple-darwin',
-          'aarch64-apple-darwin',
-          'x86_64-pc-windows-gnu',
-#          'aarch64-linux-android',
-#          'armv7-linux-androideabi',
-#          'i686-linux-android'
-        ]
-    outputs:
-      java_platform: ${{ steps.jdk.outputs.java_platform }}
+        include:
+          - os: ubuntu-latest
+            rust-target: x86_64-unknown-linux-gnu
+            java-architecture: x64
+
+          - os: macos-15-intel
+            rust-target: x86_64-apple-darwin
+            java-architecture: x64
+
+          - os: macos-latest
+            rust-target: aarch64-apple-darwin
+            java-architecture: arm64
+
+          - os: windows-latest
+            rust-target: x86_64-pc-windows-msvc
+            java-architecture: x64
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           target: ${{ matrix.rust-target }}
 
-      - name: Select jdk platform
-        id: jdk
-        run: |
-          if [ ${{ matrix.rust-target }} == 'aarch64-linux-android' ]; then
-            echo "java_platform=aarch64" >> $GITHUB_OUTPUT
-          
-          elif [ ${{ matrix.rust-target }} == 'armv7-linux-androideabi' ]; then
-            echo "java_platform=armv7" >> $GITHUB_OUTPUT
-          
-          elif [ ${{ matrix.rust-target }} == 'i686-linux-android' ]; then
-            echo "java_platform=x86" >> $GITHUB_OUTPUT
-
-          else
-            echo "java_platform=x64" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build rust library for ${{ matrix.rust-target }}
-        run: |
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android
-          cargo build --release --manifest-path adblock-rs/Cargo.toml
-
       - uses: actions/setup-java@v4
         with:
           java-version: '11'
-          distribution: 'temurin'
-          architecture: ${{ steps.jdk.outputs.java_platform }}
+          distribution: temurin
+          architecture: ${{ matrix.java-architecture }}
 
-      - name: Build java library
+      - name: Build Rust native library
+        run: cargo build --release --target ${{ matrix.rust-target }} --manifest-path adblock-rs/Cargo.toml
+
+      - name: Build Java library
         run: mvn package
 
       - name: Create archive
@@ -106,12 +52,12 @@ jobs:
           dest: adblock-coffee-${{ matrix.rust-target }}-${{ needs.create-release.outputs.version_output }}.zip
           recursive: true
 
-      - name: Upload linux artifact
+      - name: Upload release asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url_output }}
           asset_name: adblock-coffee-${{ matrix.rust-target }}-${{ needs.create-release.outputs.version_output }}.zip
-          asset_path: ./adblock-coffee-${{ matrix.rust-target }}-${{ needs.create-release.outputs.version_output }}.zip
+          asset_path: adblock-coffee-${{ matrix.rust-target }}-${{ needs.create-release.outputs.version_output }}.zip
           asset_content_type: application/zip
